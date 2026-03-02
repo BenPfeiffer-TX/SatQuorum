@@ -1,0 +1,27 @@
+Imagine we have a distributed array of computational nodes, such as a constellation of satellites in various orbits around a celestial body.
+We can broadcast instructions to the cluster, but cannot receive any feedback from an individual node; we have no insight into single node status. However, when all of the nodes in the cluster agree on an output, their combined broadcasting of the agreed upon result can be picked up by our broadcast station / cluster head. 
+How can we design a system that scales a computational task to an arbitrary number of nodes, with a range of time delays in signals, that can collapse to a single result? The nodes can likely broadcast to one another but only in a short range, maybe across the whole cluster but likely not.
+
+lets break this down into three-ish components:
+
+1) the edge node's software
+this will be simple at first, just a running thread that regularly checks for incoming messages, does back and forth beaconing as part of coming to a local quorum, and has some method of making a decision or doing a non-deterministic calculation based on the incoming messages
+most likely to change overtime
+
+2) the controller software
+this is the head node that will send a loud broadcast to the edge nodes in orbit, and waits for the cluster to come to an agreement to solve the request/calculation
+
+3) the orbit simulator middleman
+not sure if this should be python or golang
+this will be in charge of delivering the messages to edge nodes based on their simulated orbit e.g. calculating for time delay based on distance for each node from the head node
+this would likely be a golang program that just takes messages from a queue on one port and pushes it after x delay to the other hosts
+has to keep track of different orbits
+will need to have some method of doing handshakes with the edge nodes to make sure they are able to send/receive
+wait will every edge node need an ip? 
+
+4) the actual clustering component
+maybe the simulated edge nodes should be running in kubernetes
+good excuse to learn how to use kubernetes or similar solutions
+
+5) how will i visualize what is happening?
+not sure if go has decent enough animation packages

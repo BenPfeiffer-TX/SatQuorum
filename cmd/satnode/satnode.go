@@ -5,6 +5,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/BenPfeiffer-TX/SatQuorum/internal/types"
 )
 
 /*
@@ -27,7 +29,8 @@ func main() {
 }
 
 func fooHandler(w http.ResponseWriter, r *http.Request) {
-	var msg map[string]interface{} //replace with actual message struct
+	//var msg map[string]interface{} //replace with actual message struct
+	var msg types.Message
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return

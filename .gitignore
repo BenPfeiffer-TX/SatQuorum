@@ -1,0 +1,24 @@
+# Opencode configuration (local only)
+.opencode/
+
+# Go build artifacts
+/bin/
+/pkg/
+
+# Test coverage
+*.test
+*.out
+
+# IDE settings
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependencies (optional - usually in go.sum)
+vendor/

@@ -24,7 +24,7 @@ func main() {
 
 	http.HandleFunc("/", fooHandler)
 
-	log.Printf("Server starting on %s", addr)
+	log.Printf("Server starting on ", addr)
 	log.Fatal(http.ListenAndServe(addr, nil))
 }
 
@@ -33,13 +33,15 @@ func fooHandler(w http.ResponseWriter, r *http.Request) {
 	var msg types.Message
 	if err := json.NewDecoder(r.Body).Decode(&msg); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		log.Printf("failed to decode message")
 		return
 	}
 
+	log.Printf("received a message: ", msg.ID, msg.Payload, msg.Timestamp)
 	response := map[string]string{"status": "received"}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Println("failed to encode response:", err)
+		log.Printf("failed to encode response:", err)
 	}
 }

@@ -1,9 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"log"
-	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -28,15 +29,18 @@ func main() {
 		return
 	}
 
-	conn, err := net.Dial("tcp", addr)
+	client := &http.Client{}
+	req, err := http.NewRequest("POST", "http://localhost"+addr, bytes.NewReader(sendMsg))
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	_, err = conn.Write(sendMsg)
+	resp, err := client.Do(req)
 	if err != nil {
 		log.Println(err.Error())
 		return
 	}
+	defer resp.Body.Close()
 }

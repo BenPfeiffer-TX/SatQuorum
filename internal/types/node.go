@@ -118,24 +118,46 @@ func (m *SatNodeManager) StartNodes() error {
 	return nil
 }
 
-func (m *SatNodeManager) StopAllNodes() {
+func (m *SatNodeManager) GetNodeStatus(nodeID string) string {
 	ctx := context.Background()
 
-	for _, node := range m.Nodes {
-		nodeID := node.ID
-
-		_, err := m.Client.ContainerStop(ctx, nodeID, client.ContainerStopOptions{})
-		if err != nil {
-			fmt.Printf("Failed to stop %s: %v\n", nodeID, err)
-		}
-
-		_, err = m.Client.ContainerRemove(ctx, nodeID, client.ContainerRemoveOptions{Force: true})
-		if err != nil {
-			fmt.Printf("Failed to remove %s: %v\n", nodeID, err)
-		}
+	container, err := m.Client.ContainerInspect(ctx, nodeID, client.ContainerInspectOptions{})
+	if err != nil {
+		return "unknown"
 	}
 
-	m.Nodes = make(map[string]NodeInfo)
+	state := container.Container.State
+	if state == nil {
+		return "unknown"
+	}
+
+	switch state.Status {
+	case "running":
+		return "running"
+	case "paused":
+		return "paused"
+	case "restarting":
+		return "restarting"
+	case "exited", "dead":
+		return "stopped"
+	default:
+		return "unknown"
+	}
+}
+
+func (m *SatNodeManager) ListNodes() []map[string]interface{} {
+	result := make([]map[string]interface{}, 0, len(m.Nodes))
+
+	for nodeID, info := range m.Nodes {
+		status := m.GetNodeStatus(nodeID)
+		result = append(result, map[string]interface{}{
+			"nodeID": nodeID,
+			"port":   info.Port,
+			"status": status,
+		})
+	}
+
+	return result
 }
 
 func (m *SatNodeManager) SendTestMessages() error {
@@ -171,4 +193,24 @@ func (m *SatNodeManager) SendTestMessages() error {
 	}
 
 	return nil
+}
+
+func (m *SatNodeManager) StopAllNodes() {
+	ctx := context.Background()
+
+	for _, node := range m.Nodes {
+		nodeID := node.ID
+
+		_, err := m.Client.ContainerStop(ctx, nodeID, client.ContainerStopOptions{})
+		if err != nil {
+			fmt.Printf("Failed to stop %s: %v\n", nodeID, err)
+		}
+
+		_, err = m.Client.ContainerRemove(ctx, nodeID, client.ContainerRemoveOptions{Force: true})
+		if err != nil {
+			fmt.Printf("Failed to remove %s: %v\n", nodeID, err)
+		}
+	}
+
+	m.Nodes = make(map[string]NodeInfo)
 }

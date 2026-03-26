@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/BenPfeiffer-TX/SatQuorum/internal/types"
@@ -13,7 +14,7 @@ import (
 
 func main() {
 	count := 10
-	image := "placeholder"
+	image := "satnode:latest"
 
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
@@ -52,15 +53,31 @@ func main() {
 	fmt.Print("> ")
 
 	for scanner.Scan() {
-		cmd := scanner.Text()
+		cmd := strings.TrimSpace(scanner.Text())
 
 		switch cmd {
+		case "list":
+			nodes := manager.ListNodes()
+			if len(nodes) == 0 {
+				fmt.Println("No running satnodes")
+			} else {
+				fmt.Printf("%-15s %-10s %s\n", "NODE ID", "PORT", "STATUS")
+				fmt.Println(strings.Repeat("-", 35))
+				for _, node := range nodes {
+					fmt.Printf("%-15s %-10d %s\n", node["nodeID"], node["port"], node["status"])
+				}
+			}
+		case "help":
+			fmt.Println("Available Commands:")
+			fmt.Println("  list    - List all running satnodes with their ports and status")
+			fmt.Println("  help    - Show this help message")
+			fmt.Println("  exit    - Exit and stop all nodes")
 		case "exit":
 			fmt.Println("Stopping all nodes...")
 			manager.StopAllNodes()
 			return
 		default:
-			fmt.Printf("Unknown command: %s\n", cmd)
+			fmt.Printf("Unknown command: %s (type 'help' for available commands)\n", cmd)
 		}
 
 		fmt.Print("> ")

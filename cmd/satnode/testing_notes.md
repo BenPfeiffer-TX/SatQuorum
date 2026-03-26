@@ -31,6 +31,22 @@ satnode-1: OK
 satnode-2: OK
 ...
 === Interactive Mode ===
+Available Commands:
+  list    - List all running satnodes with their ports and status
+  help    - Show this help message
+  exit    - Exit and stop all nodes
+
+Example usage:
+> list
+NODE ID           PORT       STATUS
+satnode-0         32768      running
+satnode-1         32769      running
+...
+> help
+Available Commands:
+  list    - List all running satnodes with their ports and status
+  help    - Show this help message
+  exit    - Exit and stop all nodes
 > exit
 Stopping all nodes...
 Step 3: Verify containers are running

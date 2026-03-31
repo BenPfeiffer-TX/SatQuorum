@@ -18,23 +18,23 @@ docker ps
 ```
 
 ### DOCKER_HOST Configuration (Linux - Docker Desktop)
-If you're using **Docker Desktop on Linux**, the Docker socket is typically located at `/home/lars/.docker/desktop/docker.sock`. Headcli will automatically detect this path, but if it fails to find a valid socket, you'll need to set the `DOCKER_HOST` environment variable:
+If you're using **Docker Desktop on Linux**, the Docker socket is typically located at `/home/$user$/.docker/desktop/docker.sock`. Headcli will automatically detect this path, but if it fails to find a valid socket, you'll need to set the `DOCKER_HOST` environment variable:
 
 ```bash
-export DOCKER_HOST=unix:///home/lars/.docker/desktop/docker.sock
+export DOCKER_HOST=unix:///home/$user$/.docker/desktop/docker.sock
 ```
 
 **To make this persistent across reboots**, add the export command to your shell configuration file (`~/.bashrc`, `~/.zshrc`, or similar):
 
 ```bash
-echo 'export DOCKER_HOST=unix:///home/lars/.docker/desktop/docker.sock' >> ~/.bashrc
+echo 'export DOCKER_HOST=unix:///home/$user$/.docker/desktop/docker.sock' >> ~/.bashrc
 source ~/.bashrc
 ```
 
 **Alternative: Use Docker Contexts** (recommended for multi-environment setups)
 ```bash
 # Create a custom context for Docker Desktop
-docker context create desktop --docker "host=unix:///home/lars/.docker/desktop/docker.sock"
+docker context create desktop --docker "host=unix:///home/$user$/.docker/desktop/docker.sock"
 docker context use desktop
 ```
 
@@ -52,9 +52,9 @@ docker build -t satnode:latest .
 ```
 
 Headcli will automatically detect and use your Docker socket if `DOCKER_HOST` is not explicitly set. It searches for common socket locations:
-- `/home/lars/.docker/desktop/docker.sock` (Docker Desktop)
+- `/home/$user$/.docker/desktop/docker.sock` (Docker Desktop)
 - `/var/run/docker.sock` (standard Linux location)
-- `/run/user/1000/docker.sock` (user-specific Docker)
+- `/run/$user$/1000/docker.sock` (user-specific Docker)
 
 ### 3. Interactive Commands
 Once running, headcli provides an interactive shell:
@@ -109,12 +109,6 @@ const MaxConcurrentSpawning = 50 // Change this value as needed
 - `DOCKER_HOST`: Docker socket path (auto-detected if not set)
 - `PORT`: Satnode listening port (default: 8080, set inside container)
 
-## Testing and Validation
-
-### Running Tests
-```bash
-go test ./...
-```
 
 ### Manual Verification
 1. Start headcli

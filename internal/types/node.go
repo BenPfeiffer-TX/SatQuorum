@@ -6,12 +6,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	"github.com/moby/moby/client"
 )
+
+const MaxConcurrentSpawning = 50
 
 type NodeInfo struct {
 	ID   string
@@ -43,73 +46,84 @@ func NewSatNodeManager(dockerClient *client.Client, count int, image string) (*S
 func (m *SatNodeManager) StartNodes() error {
 	ctx := context.Background()
 
+	sem := make(chan struct{}, MaxConcurrentSpawning)
+	var wg sync.WaitGroup
+
 	for i := 0; i < m.Count; i++ {
-		nodeID := fmt.Sprintf("satnode-%d", i)
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
 
-		portBinding := network.PortBinding{HostPort: ""}
-		portMap := network.PortMap{network.MustParsePort("8080/tcp"): []network.PortBinding{portBinding}}
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		createOpts := client.ContainerCreateOptions{
-			Name: nodeID,
-			Config: &container.Config{
-				Image: m.Image,
-				Env:   []string{"PORT=8080"},
-			},
-			HostConfig: &container.HostConfig{
-				PortBindings: portMap,
-			},
-		}
+			nodeID := fmt.Sprintf("satnode-%d", idx)
 
-		resp, err := m.Client.ContainerCreate(ctx, createOpts)
-		if err != nil {
-			fmt.Printf("Failed to create container %s: %v\n", nodeID, err)
-			continue
-		}
+			portBinding := network.PortBinding{HostPort: ""}
+			portMap := network.PortMap{network.MustParsePort("8080/tcp"): []network.PortBinding{portBinding}}
 
-		_, err = m.Client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{})
-		if err != nil {
-			fmt.Printf("Failed to start container %s: %v\n", nodeID, err)
-			m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
-			continue
-		}
+			createOpts := client.ContainerCreateOptions{
+				Name: nodeID,
+				Config: &container.Config{
+					Image: m.Image,
+					Env:   []string{"PORT=8080"},
+				},
+				HostConfig: &container.HostConfig{
+					PortBindings: portMap,
+				},
+			}
 
-		time.Sleep(1 * time.Second)
+			resp, err := m.Client.ContainerCreate(ctx, createOpts)
+			if err != nil {
+				fmt.Printf("Failed to create container %s: %v\n", nodeID, err)
+				return
+			}
 
-		result, err := m.Client.ContainerInspect(ctx, resp.ID, client.ContainerInspectOptions{})
-		if err != nil {
-			fmt.Printf("Failed to inspect container %s: %v\n", nodeID, err)
-			m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
-			m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
-			continue
-		}
+			_, err = m.Client.ContainerStart(ctx, resp.ID, client.ContainerStartOptions{})
+			if err != nil {
+				fmt.Printf("Failed to start container %s: %v\n", nodeID, err)
+				m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+				return
+			}
 
-		port := ""
-		if portMap, ok := result.Container.NetworkSettings.Ports[network.MustParsePort("8080/tcp")]; ok && len(portMap) > 0 {
-			port = portMap[0].HostPort
-		}
+			result, err := m.Client.ContainerInspect(ctx, resp.ID, client.ContainerInspectOptions{})
+			if err != nil {
+				fmt.Printf("Failed to inspect container %s: %v\n", nodeID, err)
+				m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
+				m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+				return
+			}
 
-		if port == "" {
-			fmt.Printf("Failed to get host port for container %s\n", nodeID)
-			m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
-			m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
-			continue
-		}
+			port := ""
+			if portMap, ok := result.Container.NetworkSettings.Ports[network.MustParsePort("8080/tcp")]; ok && len(portMap) > 0 {
+				port = portMap[0].HostPort
+			}
 
-		var portInt int
-		if _, err := fmt.Sscanf(port, "%d", &portInt); err != nil {
-			fmt.Printf("Failed to parse host port for container %s\n", nodeID)
-			m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
-			m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
-			continue
-		}
+			if port == "" {
+				fmt.Printf("Failed to get host port for container %s\n", nodeID)
+				m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
+				m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+				return
+			}
 
-		m.Nodes[nodeID] = NodeInfo{
-			ID:   nodeID,
-			Port: portInt,
-		}
+			var portInt int
+			if _, err := fmt.Sscanf(port, "%d", &portInt); err != nil {
+				fmt.Printf("Failed to parse host port for container %s\n", nodeID)
+				m.Client.ContainerStop(ctx, resp.ID, client.ContainerStopOptions{})
+				m.Client.ContainerRemove(ctx, resp.ID, client.ContainerRemoveOptions{Force: true})
+				return
+			}
 
-		fmt.Printf("Started %s on port %d\n", nodeID, m.Nodes[nodeID].Port)
+			m.Nodes[nodeID] = NodeInfo{
+				ID:   nodeID,
+				Port: portInt,
+			}
+
+			fmt.Printf("Started %s on port %d\n", nodeID, m.Nodes[nodeID].Port)
+		}(i)
 	}
+
+	wg.Wait()
 
 	if len(m.Nodes) == 0 {
 		return fmt.Errorf("failed to start any nodes")
@@ -161,37 +175,42 @@ func (m *SatNodeManager) ListNodes() []map[string]interface{} {
 }
 
 func (m *SatNodeManager) SendTestMessages() error {
+	var wg sync.WaitGroup
+
 	for _, node := range m.Nodes {
-		nodeID := node.ID
-		port := node.Port
+		wg.Add(1)
+		go func(nodeID string, port int) {
+			defer wg.Done()
 
-		msg := map[string]string{
-			"id":        "verification",
-			"payload":   "test message from headcli",
-			"timestamp": time.Now().Format(time.RFC3339),
-		}
+			msg := map[string]string{
+				"id":        "verification",
+				"payload":   "test message from headcli",
+				"timestamp": time.Now().Format(time.RFC3339),
+			}
 
-		jsonData, err := json.Marshal(msg)
-		if err != nil {
-			fmt.Printf("%s: FAILED to marshal JSON\n", nodeID)
-			continue
-		}
+			jsonData, err := json.Marshal(msg)
+			if err != nil {
+				fmt.Printf("%s: FAILED to marshal JSON\n", nodeID)
+				return
+			}
 
-		resp, err := http.Post(fmt.Sprintf("http://localhost:%d/", port), "application/json", bytes.NewReader(jsonData))
-		if err != nil {
-			fmt.Printf("%s: FAILED - %v\n", nodeID, err)
-			continue
-		}
+			resp, err := http.Post(fmt.Sprintf("http://localhost:%d/", port), "application/json", bytes.NewReader(jsonData))
+			if err != nil {
+				fmt.Printf("%s: FAILED - %v\n", nodeID, err)
+				return
+			}
 
-		defer resp.Body.Close()
+			defer resp.Body.Close()
 
-		if resp.StatusCode == http.StatusOK {
-			fmt.Printf("%s: OK\n", nodeID)
-		} else {
-			fmt.Printf("%s: FAILED - status %d\n", nodeID, resp.StatusCode)
-		}
+			if resp.StatusCode == http.StatusOK {
+				fmt.Printf("%s: OK\n", nodeID)
+			} else {
+				fmt.Printf("%s: FAILED - status %d\n", nodeID, resp.StatusCode)
+			}
+		}(node.ID, node.Port)
 	}
 
+	wg.Wait()
 	return nil
 }
 

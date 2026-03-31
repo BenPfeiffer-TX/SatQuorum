@@ -12,9 +12,39 @@ import (
 	"github.com/moby/moby/client"
 )
 
+func getDockerHost() string {
+	if host := os.Getenv("DOCKER_HOST"); host != "" {
+		return host
+	}
+
+	commonPaths := []string{
+		"/home/lars/.docker/desktop/docker.sock",
+		"/var/run/docker.sock",
+		"/run/user/1000/docker.sock",
+		"/run/docker.sock",
+	}
+
+	for _, path := range commonPaths {
+		if _, err := os.Stat(path); err == nil {
+			return fmt.Sprintf("unix://%s", path)
+		}
+	}
+
+	return ""
+}
+
 func main() {
 	count := 10
 	image := "satnode:latest"
+
+	dockerHost := getDockerHost()
+	if dockerHost != "" {
+		fmt.Printf("Using Docker host: %s\n", dockerHost)
+	} else if os.Getenv("DOCKER_HOST") == "" {
+		fmt.Fprintln(os.Stderr, "\n⚠️  Warning: DOCKER_HOST environment variable not set and no common socket found.")
+		fmt.Fprintln(os.Stderr, "   Please run: export DOCKER_HOST=unix:///path/to/docker.sock")
+		fmt.Fprintln(os.Stderr, "   Or ensure Docker Desktop is running with the correct socket path.\n")
+	}
 
 	dockerClient, err := client.NewClientWithOpts(client.FromEnv)
 	if err != nil {
